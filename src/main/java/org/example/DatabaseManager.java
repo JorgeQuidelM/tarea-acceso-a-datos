@@ -149,12 +149,17 @@ public class DatabaseManager {
     public void updateRecord(String schemaName, String tableName, String columnName, String newValue, Record whereRecord) throws DatabaseException {
         List<String> whereColumns = whereRecord.getColumnNames();
         List<String> dataTypes = getColumnsTypes(schemaName, tableName);
+        List<String> columns = getColumnsNames(schemaName, tableName);
+        int indexColumnName = columns.indexOf(columnName);
+        String columnValueType = dataTypes.get(indexColumnName);
         String query = getUpdateQuery(schemaName, tableName, columnName, whereRecord);
         try (PreparedStatement statement = conexion.prepareStatement(query)) {
-            statement.setString(1, newValue);
-            int j = 2;
+            int j = 1;
+            setParameterValue(statement, j, columnValueType, newValue);
             for (String column : whereColumns) {
-                setParameterValue(statement, j, dataTypes.get(j),whereRecord.getValue(column) );
+                int indexWhereName = columns.indexOf(column);
+                String columnWhereType = dataTypes.get(indexWhereName);
+                setParameterValue(statement, j+1, columnWhereType, whereRecord.getValue(column));
                 j++;
             }
             int rowsAffected = statement.executeUpdate();
