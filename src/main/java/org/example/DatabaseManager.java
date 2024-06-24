@@ -45,18 +45,6 @@ public class DatabaseManager {
         return records;
     }
 
-    public List<Record> selectColumns(String tableName, List<String> columnNames) throws DatabaseException {
-        String query = "SELECT " + String.join(", ", columnNames) + " FROM " + tableName;
-        List<Record> records;
-        try (Statement statement = conexion.createStatement();
-             ResultSet resultSet = statement.executeQuery(query)) {
-            records = buildRecordsFromResultSet(resultSet, columnNames);
-        } catch (SQLException errSql) {
-            throw new DatabaseException("Error SQL al intentar obtener los registros: " + errSql.getMessage(), errSql);
-        }
-        return records;
-    }
-
     private List<Record> buildRecordsFromResultSet(ResultSet resultSet, List<String> columnNames) throws SQLException {
         List<Record> records = new ArrayList<>();
         while (resultSet.next()) {
@@ -71,11 +59,11 @@ public class DatabaseManager {
 
     public void insertRecord(String schemaName, String tableName, Record record) throws DatabaseException {
         String query = getInsertQuery(schemaName, tableName, record);
-        List<String> dataTypes = getColumnsTypes(schemaName, tableName);
         try (PreparedStatement statement = conexion.prepareStatement(query)) {
             int i = 0;
             for (String columnName : record.getColumnNames()) {
-                setParameterValue(statement, i + 1, dataTypes.get(i), record.getValue(columnName));
+                String columnType = getColumnType(schemaName, tableName, columnName);
+                setParameterValue(statement, i + 1, columnType, record.getValue(columnName));
                 i++;
             }
             int rowsAffected = statement.executeUpdate();
@@ -114,13 +102,11 @@ public class DatabaseManager {
 
     public void deleteRecord(String schemaName, String tableName, Record whereRecord) throws DatabaseException {
         List<String> whereColumns = whereRecord.getColumnNames();
-        List<String> dataTypes = getColumnsTypes(schemaName, tableName);
         String query = getDeleteQuery(schemaName, tableName, whereRecord);
         try (PreparedStatement statement = conexion.prepareStatement(query)) {
-            int i = 0;
             for (String columnName : whereColumns) {
-                setParameterValue(statement, i + 1, dataTypes.get(i), whereRecord.getValue(columnName));
-                i++;
+                String columnType = getColumnType(schemaName, tableName, columnName);
+                setParameterValue(statement, whereColumns.indexOf(columnName) + 1, columnType, whereRecord.getValue(columnName));
             }
             int rowsAffected = statement.executeUpdate();
             conexion.commit();
@@ -132,6 +118,18 @@ public class DatabaseManager {
             throw new DatabaseException("Error Parse al intentar persear un valor de la columna" + errPar.getMessage(), errPar);
         } catch (IllegalArgumentException errIll){
             throw new DatabaseException("Error IllegalArgument al reconoce el tipo de dato" + errIll.getMessage(), errIll);
+        }
+    }
+
+    public String getColumnType(String schemaName, String tableName, String columnName) throws DatabaseException {
+        List<String> columnTypes = getColumnsTypes(schemaName, tableName);
+        List<String> columnNames = getColumnsNames(schemaName, tableName);
+
+        int columnIndex = columnNames.indexOf(columnName);
+        if (columnIndex != -1) {
+            return columnTypes.get(columnIndex);
+        } else {
+            throw new DatabaseException("La columna '" + columnName + "' no existe en la tabla '" + tableName + "'.");
         }
     }
 
@@ -148,21 +146,16 @@ public class DatabaseManager {
 
     public void updateRecord(String schemaName, String tableName, String columnName, String newValue, Record whereRecord) throws DatabaseException {
         List<String> whereColumns = whereRecord.getColumnNames();
-        List<String> dataTypes = getColumnsTypes(schemaName, tableName);
-        List<String> columns = getColumnsNames(schemaName, tableName);
-        int indexColumnName = columns.indexOf(columnName);
-        String columnValueType = dataTypes.get(indexColumnName);
         String query = getUpdateQuery(schemaName, tableName, columnName, whereRecord);
         try (PreparedStatement statement = conexion.prepareStatement(query)) {
-            int j = 1;
-            setParameterValue(statement, j, columnValueType, newValue);
-            for (String column : whereColumns) {
-                int indexWhereName = columns.indexOf(column);
-                String columnWhereType = dataTypes.get(indexWhereName);
-                setParameterValue(statement, j+1, columnWhereType, whereRecord.getValue(column));
-                j++;
+            String columnType = getColumnType(schemaName, tableName, columnName);
+            setParameterValue(statement, 1, columnType, newValue);
+            for (String whereColumn : whereColumns) {
+                String whereColumnType = getColumnType(schemaName, tableName, whereColumn);
+                setParameterValue(statement, whereColumns.indexOf(whereColumn) + 2, whereColumnType, whereRecord.getValue(whereColumn));
             }
             int rowsAffected = statement.executeUpdate();
+            conexion.commit();
             System.out.println(rowsAffected + " fila(s) actualizada(s).");
         } catch (SQLException errSql) {
             throw new DatabaseException("Error SQL al intentar modificar un registro: " + errSql.getMessage(), errSql);
@@ -201,42 +194,34 @@ public class DatabaseManager {
         return tableNames;
     }
 
-    public List<String> getColumnsNames(String schemaName, String tableName) throws DatabaseException {
-        List<String> columnNames = new ArrayList<>();
-        String query = "SELECT column_name " +
-                "FROM information_schema.columns " +
-                "WHERE table_schema = '" + schemaName + "' " +
-                "AND table_name = '" + tableName + "';";
-        try (Statement statement = conexion.createStatement();
-             ResultSet columns = statement.executeQuery(query)) {
+    private List<String> getColumnMetadata(String schemaName, String tableName, String columnName) throws DatabaseException {
+        List<String> metadataList = new ArrayList<>();
+        String query = "SELECT " + columnName +
+                " FROM information_schema.columns " +
+                " WHERE table_schema = ? AND table_name = ?";
 
-            while (columns.next()) {
-                String columnName = columns.getString("column_name");
-                columnNames.add(columnName);
+        try (PreparedStatement statement = conexion.prepareStatement(query)) {
+            statement.setString(1, schemaName);
+            statement.setString(2, tableName);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    String metadata = resultSet.getString(columnName);
+                    metadataList.add(metadata);
+                }
             }
         } catch (SQLException errSql) {
-            throw new DatabaseException("Error SQL al intentar obtener las columnas: " + errSql.getMessage(), errSql);
+            throw new DatabaseException("Error SQL al intentar obtener " + columnName + ": " + errSql.getMessage(), errSql);
         }
-        return columnNames;
+        return metadataList;
+    }
+
+    public List<String> getColumnsNames(String schemaName, String tableName) throws DatabaseException {
+        return getColumnMetadata(schemaName, tableName, "column_name");
     }
 
     public List<String> getColumnsTypes(String schemaName, String tableName) throws DatabaseException {
-        List<String> columnTypes = new ArrayList<>();
-        String query = "SELECT data_type " +
-                "FROM information_schema.columns " +
-                "WHERE table_schema = '" + schemaName + "' " +
-                "AND table_name = '" + tableName + "'";
-        try (Statement statement = conexion.createStatement();
-             ResultSet resultSet = statement.executeQuery(query)) {
-
-            while (resultSet.next()) {
-                String columnType = resultSet.getString("data_type");
-                columnTypes.add(columnType);
-            }
-        } catch (SQLException errSql) {
-            throw new DatabaseException("Error SQL al intentar obtener los tipos de datos de las columnas: " + errSql.getMessage(), errSql);
-        }
-        return columnTypes;
+        return getColumnMetadata(schemaName, tableName, "data_type");
     }
 
     public List<String> getColumnValues(String schemaName, String tableName, String columnName) throws DatabaseException {
