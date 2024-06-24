@@ -10,6 +10,10 @@ public class Menu {
         this.database = database;
     }
 
+    public void startMenu(){
+        showSchemasMenu();
+    }
+
     public void showSchemasMenu() {
         List<String> schemaNames = getSchemaNames();
         if(schemaNames == null){
@@ -108,14 +112,14 @@ public class Menu {
     }
 
     private void updateRecord(String schemaName, String tableName, List<String> columnNames) {
-        String whereColumn = getColumnName(tableName, columnNames, "filtrar y modificar");
+        String whereColumn = getColumnName(tableName, columnNames, "filtrar (WHERE)");
         String whereValue = getWhereValue(schemaName, tableName, whereColumn);
         if (whereValue == null) {
             return;
         }
         Record whereRecord = new Record();
         whereRecord.addColumnValue(whereColumn, whereValue);
-        String columnNameForNewValue = getColumnName(tableName, columnNames, "modificar");
+        String columnNameForNewValue = getColumnName(tableName, columnNames, "modificar (SET)");
         String newValue = ConsoleUtils.getStringInput("Ingrese el nuevo valor para " + columnNameForNewValue + ": ");
         try {
             database.updateRecord(schemaName, tableName, columnNameForNewValue, newValue, whereRecord);
@@ -125,7 +129,7 @@ public class Menu {
     }
 
     private void deleteRecord(String schemaName, String tableName, List<String> columnNames) {
-        String whereColumn = getColumnName(tableName, columnNames, "filtrar y eliminar");
+        String whereColumn = getColumnName(tableName, columnNames, "filtrar y eliminar (WHERE/DELETE)");
         String whereValue = getWhereValue(schemaName, tableName, whereColumn);
         if (whereValue == null) {
             return;
