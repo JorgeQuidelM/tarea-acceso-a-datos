@@ -33,24 +33,26 @@ public class DatabaseManager {
         return listaEsquemas;
     }
 
-    public List<Record> selectAll(String schemaName, String tableName, List<String> columnNames) throws DatabaseException {
+    public List<Record> selectAll(String schemaName, String tableName) throws DatabaseException {
         String query = "SELECT * FROM " + schemaName + "." + tableName;
         List<Record> records;
         try (Statement statement = conexion.createStatement();
              ResultSet resultSet = statement.executeQuery(query)) {
-            records = buildRecordsFromResultSet(resultSet, columnNames);
+            records = buildRecordsFromResultSet(schemaName, tableName, resultSet);
         } catch (SQLException errSql) {
             throw new DatabaseException("Error SQL al intentar obtener los registros: " + errSql.getMessage(), errSql);
         }
         return records;
     }
 
-    private List<Record> buildRecordsFromResultSet(ResultSet resultSet, List<String> columnNames) throws SQLException {
+    private List<Record> buildRecordsFromResultSet(String schemaName, String tableName, ResultSet resultSet) throws SQLException, DatabaseException {
+        List<String> columnNames = getColumnsNames(schemaName, tableName);
         List<Record> records = new ArrayList<>();
         while (resultSet.next()) {
             Record record = new Record();
             for (String columnName : columnNames) {
-                record.addColumnValue(columnName, resultSet.getString(columnName));
+                String columnType = getColumnType(schemaName, tableName, columnName);
+                record.addColumnValue(columnName, resultSet.getString(columnName), columnType);
             }
             records.add(record);
         }
@@ -62,8 +64,7 @@ public class DatabaseManager {
         try (PreparedStatement statement = conexion.prepareStatement(query)) {
             int i = 0;
             for (String columnName : record.getColumnNames()) {
-                String columnType = getColumnType(schemaName, tableName, columnName);
-                setParameterValue(statement, i + 1, columnType, record.getValue(columnName));
+                setParameterValue(statement, i + 1, record.getDataType(columnName), record.getValue(columnName));
                 i++;
             }
             int rowsAffected = statement.executeUpdate();
@@ -71,11 +72,11 @@ public class DatabaseManager {
             System.out.println(rowsAffected + " fila(s) insertada(s).");
         } catch (SQLException errSql) {
             rollbackOnSQLException();
-            throw new DatabaseException("Error SQL al intentar agregar un registro: " + errSql.getMessage(), errSql);
+            throw new DatabaseException("Error SQL al intentar agregar un registro. " + errSql.getMessage(), errSql);
         } catch (ParseException errPar) {
-            throw new DatabaseException("Error Parse al intentar persear un valor de la columna" + errPar.getMessage(), errPar);
+            throw new DatabaseException("Error Parse al intentar persear un valor de la columna. " + errPar.getMessage(), errPar);
         } catch (IllegalArgumentException errIll){
-            throw new DatabaseException("Error IllegalArgument al reconoce el tipo de dato" + errIll.getMessage(), errIll);
+            throw new DatabaseException("Error IllegalArgument al reconoce el tipo de dato. " + errIll.getMessage(), errIll);
         }
     }
 
@@ -105,8 +106,10 @@ public class DatabaseManager {
         String query = getDeleteQuery(schemaName, tableName, whereRecord);
         try (PreparedStatement statement = conexion.prepareStatement(query)) {
             for (String columnName : whereColumns) {
-                String columnType = getColumnType(schemaName, tableName, columnName);
-                setParameterValue(statement, whereColumns.indexOf(columnName) + 1, columnType, whereRecord.getValue(columnName));
+                setParameterValue(statement,
+                        whereColumns.indexOf(columnName) + 1,
+                        whereRecord.getDataType(columnName),
+                        whereRecord.getValue(columnName));
             }
             int rowsAffected = statement.executeUpdate();
             conexion.commit();
@@ -151,8 +154,10 @@ public class DatabaseManager {
             String columnType = getColumnType(schemaName, tableName, columnName);
             setParameterValue(statement, 1, columnType, newValue);
             for (String whereColumn : whereColumns) {
-                String whereColumnType = getColumnType(schemaName, tableName, whereColumn);
-                setParameterValue(statement, whereColumns.indexOf(whereColumn) + 2, whereColumnType, whereRecord.getValue(whereColumn));
+                setParameterValue(statement,
+                        whereColumns.indexOf(whereColumn) + 2,
+                        whereRecord.getDataType(whereColumn),
+                        whereRecord.getValue(whereColumn));
             }
             int rowsAffected = statement.executeUpdate();
             conexion.commit();

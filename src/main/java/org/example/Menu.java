@@ -42,24 +42,6 @@ public class Menu {
         showColumnsMenu(schemaName, tableSelected);
     }
 
-    private List<String> getSchemaNames() {
-        try {
-            return database.getSchemas();
-        } catch (DatabaseException e) {
-            System.out.println(e.getMessage());
-            return null;
-        }
-    }
-
-    private List<String> getTablesNames(String schemaName) {
-        try {
-            return database.getTables(schemaName);
-        } catch (DatabaseException e) {
-            System.out.println(e.getMessage());
-            return null;
-        }
-    }
-
     private void showColumnsMenu(String schemaName, String tableSelected) {
         List<String> columnNames = getColumnNames(schemaName, tableSelected);
         if (columnNames == null || columnNames.isEmpty()) {
@@ -72,28 +54,19 @@ public class Menu {
         } while (option != 5);
     }
 
-    private List<String> getColumnNames(String schemaName, String tableSelected) {
-        try {
-            return database.getColumnsNames(schemaName, tableSelected);
-        } catch (DatabaseException e) {
-            System.out.println(e.getMessage());
-            return null;
-        }
-    }
-
     private void executeOption(int option, String schemaName, String tableSelected, List<String> columnNames) {
         switch (option) {
-            case 1 -> selectAllRecords(schemaName, tableSelected, columnNames);
-            case 2 -> updateRecord(schemaName, tableSelected, columnNames);
-            case 3 -> deleteRecord(schemaName, tableSelected, columnNames);
-            case 4 -> addNewRecord(schemaName, tableSelected, columnNames);
+            case 1 -> handleSelectAllRecords(schemaName, tableSelected);
+            case 2 -> handleUpdateRecord(schemaName, tableSelected, columnNames);
+            case 3 -> handleDeleteRecord(schemaName, tableSelected, columnNames);
+            case 4 -> handleAddNewRecord(schemaName, tableSelected, columnNames);
             case 5 -> System.out.println("Saliendo de la aplicación...");
             default -> System.out.println("Opción inválida");
         }
     }
 
-    private void selectAllRecords(String schemaName, String tableName, List<String> columnNames) {
-        List<Record> records = getRecords(schemaName, tableName, columnNames);
+    private void handleSelectAllRecords(String schemaName, String tableName) {
+        List<Record> records = getAllRecords(schemaName, tableName);
         if(records == null || records.isEmpty()){
             System.out.println("No se encontraron registros");
             return;
@@ -102,45 +75,30 @@ public class Menu {
         ConsoleUtils.printMarkedTable("Registros: ", items, "*");
     }
 
-    private List<Record> getRecords(String schemaName, String tableName, List<String> columnNames) {
-        try {
-            return database.selectAll(schemaName, tableName, columnNames);
-        } catch (DatabaseException e) {
-            System.out.println(e.getMessage());
-            return null;
-        }
-    }
-
-    private void updateRecord(String schemaName, String tableName, List<String> columnNames) {
+    private void handleUpdateRecord(String schemaName, String tableName, List<String> columnNames) {
         String whereColumn = getColumnName(tableName, columnNames, "filtrar (WHERE)");
         String whereValue = getWhereValue(schemaName, tableName, whereColumn);
-        if (whereValue == null) {
+        String whereType = getColumnType(schemaName, tableName, whereColumn);
+        if (whereValue == null || whereType == null) {
             return;
         }
         Record whereRecord = new Record();
-        whereRecord.addColumnValue(whereColumn, whereValue);
+        whereRecord.addColumnValue(whereColumn, whereValue, whereType);
         String columnNameForNewValue = getColumnName(tableName, columnNames, "modificar (SET)");
         String newValue = ConsoleUtils.getStringInput("Ingrese el nuevo valor para " + columnNameForNewValue + ": ");
-        try {
-            database.updateRecord(schemaName, tableName, columnNameForNewValue, newValue, whereRecord);
-        } catch (DatabaseException e) {
-            System.out.println(e.getMessage());
-        }
+        updateRecord(schemaName, tableName, columnNameForNewValue, newValue, whereRecord);
     }
 
-    private void deleteRecord(String schemaName, String tableName, List<String> columnNames) {
+    private void handleDeleteRecord(String schemaName, String tableName, List<String> columnNames) {
         String whereColumn = getColumnName(tableName, columnNames, "filtrar y eliminar (WHERE/DELETE)");
         String whereValue = getWhereValue(schemaName, tableName, whereColumn);
-        if (whereValue == null) {
+        String whereType = getColumnType(schemaName, tableName, whereColumn);
+        if (whereValue == null || whereType == null) {
             return;
         }
         Record whereRecord = new Record();
-        whereRecord.addColumnValue(whereColumn, whereValue);
-        try {
-            database.deleteRecord(schemaName, tableName, whereRecord);
-        } catch (DatabaseException e) {
-            System.out.println(e.getMessage());
-        }
+        whereRecord.addColumnValue(whereColumn, whereValue, whereType);
+        deleteRecord(schemaName, tableName, whereRecord);
     }
 
     private String getWhereValue(String schemaName, String tableName, String columnName) {
@@ -178,6 +136,77 @@ public class Menu {
         return columnNames.get(columnIndex);
     }
 
+    private void handleAddNewRecord(String schemaName, String tableName, List<String> columnNames) {
+        if (columnNames == null || columnNames.isEmpty()) {
+            System.out.println("No hay columnas disponibles para la tabla " + tableName + ".");
+            return;
+        }
+        Record record = insertValuesOnRecord(schemaName, tableName, columnNames);
+        insertNewRecord(schemaName, tableName, record);
+    }
+
+    private Record insertValuesOnRecord(String schemaName, String tableName, List<String> columnNames) {
+        Record record = new Record();
+
+        for (String columnName : columnNames) {
+            String columnType = getColumnType(schemaName, tableName, columnName);
+            String value = ConsoleUtils.getStringInput("Ingrese el valor para la columna " + columnName + " (" + columnType + "): ");
+            record.addColumnValue(columnName, value, columnType);
+        }
+        return record;
+    }
+
+    private void updateRecord(String schemaName, String tableName, String columnNameNewValue, String newValue, Record whereRecord) {
+        try {
+            database.updateRecord(schemaName, tableName, columnNameNewValue, newValue, whereRecord);
+        } catch (DatabaseException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    private void deleteRecord(String schemaName, String tableName, Record record) {
+        try {
+            database.deleteRecord(schemaName, tableName, record);
+        } catch (DatabaseException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    private void insertNewRecord(String schemaName, String tableName, Record record) {
+        try {
+            database.insertRecord(schemaName, tableName, record);
+        } catch (DatabaseException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    private List<String> getColumnNames(String schemaName, String tableSelected) {
+        try {
+            return database.getColumnsNames(schemaName, tableSelected);
+        } catch (DatabaseException e) {
+            System.out.println(e.getMessage());
+            return null;
+        }
+    }
+
+    private List<Record> getAllRecords(String schemaName, String tableName) {
+        try {
+            return database.selectAll(schemaName, tableName);
+        } catch (DatabaseException e) {
+            System.out.println(e.getMessage());
+            return null;
+        }
+    }
+
+    private String getColumnType(String schemaName, String tableName, String columnName){
+        try {
+            return database.getColumnType(schemaName, tableName, columnName);
+        } catch (DatabaseException e) {
+            System.out.println(e.getMessage());
+            return null;
+        }
+    }
+
     private List<String> getValuesNames(String schemaName, String tableName, String columnName){
         try {
             return database.getColumnValues(schemaName, tableName, columnName);
@@ -186,26 +215,22 @@ public class Menu {
         }
     }
 
-    private void addNewRecord(String schemaName, String tableName, List<String> columnNames) {
-        if (columnNames == null || columnNames.isEmpty()) {
-            System.out.println("No hay columnas disponibles para la tabla " + tableName + ".");
-            return;
-        }
-        Record record = insertRecord(columnNames);
+    private List<String> getSchemaNames() {
         try {
-            database.insertRecord(schemaName, tableName, record);
+            return database.getSchemas();
         } catch (DatabaseException e) {
             System.out.println(e.getMessage());
+            return null;
         }
     }
 
-    private Record insertRecord(List<String> columnNames) {
-        Record record = new Record();
-        for (String columnName : columnNames) {
-            String value = ConsoleUtils.getStringInput("Ingrese el valor para la columna " + columnName + ": ");
-            record.addColumnValue(columnName, value);
+    private List<String> getTablesNames(String schemaName) {
+        try {
+            return database.getTables(schemaName);
+        } catch (DatabaseException e) {
+            System.out.println(e.getMessage());
+            return null;
         }
-        return record;
     }
 
     private int askTableIndex(List<String> tableNames) {

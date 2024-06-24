@@ -4,12 +4,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Record {
-    private List<String> columnNames = new ArrayList<>();
-    private List<String> columnValues = new ArrayList<>();
+    private final List<String> columnNames = new ArrayList<>();
+    private final List<String> columnValues = new ArrayList<>();
+    private final List<String> columnDataTypes = new ArrayList<>();
 
-    public void addColumnValue(String columnName, String value) {
+    public void addColumnValue(String columnName, String value, String dataType) {
         columnNames.add(columnName);
         columnValues.add(value);
+        columnDataTypes.add(dataType);
     }
 
     public String getValue(String columnName) {
@@ -20,8 +22,20 @@ public class Record {
         return null; // O maneja el caso donde la columna no existe
     }
 
+    public String getDataType(String columnName) {
+        int index = columnNames.indexOf(columnName);
+        if (index != -1) {
+            return columnDataTypes.get(index);
+        }
+        return null; // O maneja el caso donde la columna no existe
+    }
+
     public List<String> getColumnNames() {
         return columnNames;
+    }
+
+    public List<String> getColumnDataTypes() {
+        return columnDataTypes;
     }
 
     @Override
