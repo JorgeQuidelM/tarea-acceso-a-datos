@@ -6,15 +6,18 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class DatabaseManager {
     private final Connection conexion;
+    private final ReentrantLock lock = new ReentrantLock();
 
     public DatabaseManager(Connection conexion) {
         this.conexion = conexion;
     }
 
     public List<String> getSchemas() throws DatabaseException {
+        lock.lock();
         List<String> listaEsquemas = new ArrayList<>();
         String query = "SELECT nspname AS schema_name " +
                 "FROM pg_catalog.pg_namespace " +
@@ -29,11 +32,14 @@ public class DatabaseManager {
             }
         } catch (SQLException errSql) {
             throw new DatabaseException("Error SQL al intentar obtener los registros: " + errSql.getMessage(), errSql);
+        } finally {
+            lock.unlock();
         }
         return listaEsquemas;
     }
 
     public List<Record> selectAll(String schemaName, String tableName) throws DatabaseException {
+        lock.lock();
         String query = "SELECT * FROM " + schemaName + "." + tableName;
         List<Record> records;
         try (Statement statement = conexion.createStatement();
@@ -42,6 +48,7 @@ public class DatabaseManager {
         } catch (SQLException errSql) {
             throw new DatabaseException("Error SQL al intentar obtener los registros: " + errSql.getMessage(), errSql);
         }
+        lock.unlock();
         return records;
     }
 
@@ -60,6 +67,7 @@ public class DatabaseManager {
     }
 
     public void insertRecord(String schemaName, String tableName, Record record) throws DatabaseException {
+        lock.lock();
         String query = getInsertQuery(schemaName, tableName, record);
         try (PreparedStatement statement = conexion.prepareStatement(query)) {
             int i = 0;
@@ -77,6 +85,8 @@ public class DatabaseManager {
             throw new DatabaseException("Error Parse al intentar persear un valor de la columna. " + errPar.getMessage(), errPar);
         } catch (IllegalArgumentException errIll){
             throw new DatabaseException("Error IllegalArgument al reconoce el tipo de dato. " + errIll.getMessage(), errIll);
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -102,6 +112,7 @@ public class DatabaseManager {
     }
 
     public void deleteRecord(String schemaName, String tableName, Record whereRecord) throws DatabaseException {
+        lock.lock();
         List<String> whereColumns = whereRecord.getColumnNames();
         String query = getDeleteQuery(schemaName, tableName, whereRecord);
         try (PreparedStatement statement = conexion.prepareStatement(query)) {
@@ -121,6 +132,8 @@ public class DatabaseManager {
             throw new DatabaseException("Error Parse al intentar persear un valor de la columna" + errPar.getMessage(), errPar);
         } catch (IllegalArgumentException errIll){
             throw new DatabaseException("Error IllegalArgument al reconoce el tipo de dato" + errIll.getMessage(), errIll);
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -148,6 +161,7 @@ public class DatabaseManager {
     }
 
     public void updateRecord(String schemaName, String tableName, String columnName, String newValue, Record whereRecord) throws DatabaseException {
+        lock.lock();
         List<String> whereColumns = whereRecord.getColumnNames();
         String query = getUpdateQuery(schemaName, tableName, columnName, whereRecord);
         try (PreparedStatement statement = conexion.prepareStatement(query)) {
@@ -168,6 +182,8 @@ public class DatabaseManager {
             throw new DatabaseException("Error Parse al intentar persear un valor de la columna" + errPar.getMessage(), errPar);
         } catch (IllegalArgumentException errIll){
             throw new DatabaseException("Error IllegalArgument al reconoce el tipo de dato" + errIll.getMessage(), errIll);
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -200,6 +216,7 @@ public class DatabaseManager {
     }
 
     private List<String> getColumnMetadata(String schemaName, String tableName, String columnName) throws DatabaseException {
+        lock.lock();
         List<String> metadataList = new ArrayList<>();
         String query = "SELECT " + columnName +
                 " FROM information_schema.columns " +
@@ -217,6 +234,8 @@ public class DatabaseManager {
             }
         } catch (SQLException errSql) {
             throw new DatabaseException("Error SQL al intentar obtener " + columnName + ": " + errSql.getMessage(), errSql);
+        } finally {
+            lock.unlock();
         }
         return metadataList;
     }
@@ -230,6 +249,7 @@ public class DatabaseManager {
     }
 
     public List<String> getColumnValues(String schemaName, String tableName, String columnName) throws DatabaseException {
+        lock.lock();
         String query = "SELECT " + columnName + " FROM " + schemaName + "." + tableName;
         List<String> values = new ArrayList<>();
         try (Statement statement = conexion.createStatement();
@@ -239,6 +259,8 @@ public class DatabaseManager {
             }
         } catch (SQLException errSql) {
             throw new DatabaseException("Error SQL al intentar obtener los valores de una columna: " + errSql.getMessage(), errSql);
+        } finally {
+            lock.unlock();
         }
         return values;
     }
