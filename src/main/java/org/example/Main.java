@@ -4,10 +4,10 @@ import java.sql.*;
 
 public class Main {
     public static void main(String[] args) {
-        String dbName = "universidad";
+        String dbName = "";
         String dbUrl = "jdbc:postgresql://localhost/" + dbName;
-        String user = "postgres";
-        String pass = "jorgequidel3pg";
+        String user = "";
+        String pass = "";
 
         try (Connection conexion = DatabaseConnection.getInstance(dbUrl, user, pass).getConnection()) {
             DatabaseManager database = new DatabaseManager(conexion);
